@@ -1,15 +1,25 @@
 # Raspberry PI Sound System with AirPlay, Spotify, Snapcast, and LEDFX
 
+## Problems
+
+- [ ] Snapcast doesn't work with Bluetooth (Try to sink the Bluetooth audio to the Snapcast server)
+- [ ] If a device disconnects from the Bluetooth, need to do `bluetoothctl list` and `bluetoothctl remove <MAC>` to remove the device
+- [ ] It takes too long to shutdown the Raspberry PI (Something related to the bluetooth)
+
+## Installing
+
 ```bash
 sudo apt update
 sudo apt install --no-install-recommends -y \
-      alsa-utils autoconf automake avahi-daemon build-essential cmake curl git \
-      libasound2-dev libavahi-client-dev libavcodec-dev libavformat-dev libavutil-dev \
-      libboost-program-options-dev libboost-system-dev libboost-test-dev libboost-thread-dev \
-      libconfig-dev libexpat1-dev libflac-dev libgcrypt-dev libglib2.0-dev libmosquitto-dev \
-      libopus-dev libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev libsoxr-dev \
-      libssl-dev libtool libvorbis-dev libvorbisidec-dev pulseaudio pulsemixer uuid-dev vim xxd
+      alsa-utils autoconf automake avahi-daemon bluez-tools build-essential cmake curl gcc git \
+      libasound2-dev libatlas3-base libavahi-client-dev libavcodec-dev libavformat-dev libavformat58 \
+      libavutil-dev libboost-program-options-dev libboost-system-dev libboost-test-dev libboost-thread-dev \
+      libconfig-dev libexpat1-dev libflac-dev libgcrypt-dev libglib2.0-dev libmosquitto-dev libopus-dev \
+      libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev libsoxr-dev libssl-dev libtool \
+      libvorbis-dev libvorbisidec-dev portaudio19-dev pulseaudio pulseaudio-module-bluetooth pulsemixer \
+      python3-pip uuid-dev vim xxd
 
+## Dependencies for AirPlay
 git clone https://github.com/mikebrady/nqptp.git
 cd nqptp
 autoreconf -fi
@@ -28,11 +38,7 @@ make -j $(nproc)
 sudo make install
 cd ..
 
-# testing if it is still working
-# sudo reboot
-# speaker-test -c2 --test=wav -w /usr/share/sounds/alsa/Front_Center.wav
-# if it is not working, try to run 'mv /home/pi/.asoundrc /home/pi/.asoundrc-bkp'
-
+## AirPlay (shairport-sync)
 git clone https://github.com/mikebrady/shairport-sync.git
 cd shairport-sync
 autoreconf -fi
@@ -45,11 +51,33 @@ make -j $(nproc)
 sudo make install
 cd ..
 
+## Raspotify
 curl -sL https://dtcooper.github.io/raspotify/install.sh | sh
 sudo journalctl -xeu raspotify
 
-curl -sSL https://install.ledfx.app | bash
+## LedFX
+python3 -m pip install --upgrade pip wheel setuptools
+python3 -m pip install ledfx
+sudo usermod -a -G audio pi
+echo "[Unit]
+Description=LedFx Music Visualizer
+After=network.target sound.target snapserver.service pulseaudio.service snapclient.service
+StartLimitIntervalSec=0
 
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+User=pi
+Group=audio
+ExecStart=/usr/bin/python3 /home/pi/.local/bin/ledfx
+Environment=XDG_RUNTIME_DIR=/run/user/"$UID"
+
+[Install]
+WantedBy=multi-user.target
+" | sudo tee /etc/systemd/system/ledfx.service
+
+## SnapCast
 git clone https://github.com/badaix/snapcast.git
 cd snapcast
 sudo cmake .
@@ -60,7 +88,15 @@ sed -i -e 's,/usr/share,/usr/local/share,g' ./server/etc/snapserver.conf
 sudo cp ./extras/package/debian/snapclient.service /etc/systemd/system/
 sudo cp ./extras/package/debian/snapserver.service /etc/systemd/system/
 sudo cp ./server/etc/snapserver.conf /etc/
-cd ..
+sudo systemctl disable --now shairport-sync
+sudo sed -i -e '/\[stream\]/a\source = airplay:///shairport-sync?name=AirPlay&devicename=RPiSound-AirPlay' /etc/snapserver.conf
+sudo systemctl disable --now raspotify
+sudo sed -i -e '/\[stream\]/a\source = spotify:///librespot?name=Spotify&devicename=RPiSound-Spotify' /etc/snapserver.conf
+sudo sed -i -e 's,name=default,name=pipe,g' /etc/snapserver.conf
+sudo sed -i -e '/name=pipe/a\source = meta:///AirPlay/Spotify/pipe?name=default' /etc/snapserver.conf
+sudo sed -i -e '/ExecStart=/iExecStartPre=mkdir -p /var/lib/snapclient/.config/pulse' /etc/systemd/system/snapclient.service
+sudo sed -i -e '/ExecStart=/iExecStartPre=echo "default-server = unix:/tmp/pulse-socket" > /var/lib/snapclient/.config/pulse/client.conf' /etc/systemd/system/snapclient.service
+sudo sed -i -e 's,After=.*,& snapserver.service pulseaudio.service,g' /etc/systemd/system/snapclient.service
 
 echo '# Start the server, used only by the init.d script
 START_SNAPSERVER=true
@@ -75,49 +111,41 @@ sudo usermod -a -G audio snapserver
 sudo mkdir /var/lib/snapserver
 sudo chown snapserver:snapserver /var/lib/snapserver
 
+sudo su - snapserver -s /bin/bash -c 'mkdir -p /var/lib/snapserver/.config/pulse; echo "default-server = unix:/tmp/pulse-socket" > /var/lib/snapserver/.config/pulse/client.conf'
+
 echo '# Start the client, used only by the init.d script
 START_SNAPCLIENT=true
 
 # Additional command line options that will be passed to snapclient
 # note that user/group should be configured in the init.d script or the systemd unit file
 # For a list of available options, invoke "snapclient --help" 
-SNAPCLIENT_OPTS=""' | sudo tee /etc/default/snapclient
+SNAPCLIENT_OPTS="--player pulse"' | sudo tee /etc/default/snapclient
 
 sudo useradd -r -s /usr/sbin/nologin -d /var/lib/snapclient -c "Snapcast Client" snapclient
 sudo usermod -a -G audio snapclient
 sudo mkdir /var/lib/snapclient
 sudo chown snapclient:snapclient /var/lib/snapclient
 
-###
-sudo systemctl disable --now shairport-sync
-sudo sed -i -e '/\[stream\]/a\source = airplay:///shairport-sync?name=AirPlay&devicename=RPiSound-AirPlay' /etc/snapserver.conf
+cd ..
 
-sudo systemctl disable --now raspotify
-sudo sed -i -e '/\[stream\]/a\source = spotify:///librespot?name=Spotify&devicename=RPiSound-Spotify' /etc/snapserver.conf
+## PulseAudio
+sudo cp /etc/pulse/default.pa /etc/pulse/system.pa
+echo 'load-module module-native-protocol-unix auth-anonymous=1 socket=/tmp/pulse-socket' | sudo tee -a /etc/pulse/system.pa
 
-sudo sed -i -e 's,name=default,name=pipe,g' /etc/snapserver.conf
-sudo sed -i -e '/name=pipe/a\source = meta:///AirPlay/Spotify/pipe?name=default' /etc/snapserver.conf
+echo '.ifexists module-switch-on-connect.so
+load-module module-switch-on-connect
+.endif' | sudo tee -a /etc/pulse/system.pa
 
-
-####
-
-echo 'load-module module-native-protocol-unix auth-anonymous=1 socket=/tmp/pulse-socket' | sudo tee -a /etc/pulse/default.pa
-
-sudo sed -i -e '/ExecStart=/iExecStartPre=mkdir -p /var/lib/snapclient/.config/pulse' /etc/systemd/system/snapclient.service
-sudo sed -i -e '/ExecStart=/iExecStartPre=echo "default-server = unix:/tmp/pulse-socket" > /var/lib/snapclient/.config/pulse/client.conf' /etc/systemd/system/snapclient.service
-
-sudo systemctl daemon-reload
-sudo sed -i -e 's/SNAPCLIENT_OPTS=""/SNAPCLIENT_OPTS="--player pulse"/g' /etc/default/snapclient
+sudo sed -i -e 's/^load-module module-suspend-on-idle/#load-module module-suspend-on-idle/g' /etc/pulse/system.pa
 
 sudo systemctl --global disable pulseaudio.socket pulseaudio.service
-
 
 echo '[Unit]
 Description=Sound Service
 Requires=pulseaudio.socket
 
 [Service]
-ExecStart=/usr/bin/pulseaudio --daemonize=no --log-target=journal --system
+ExecStart=/usr/bin/pulseaudio --daemonize=no --log-target=journal --system --exit-idle-time=-1
 Restart=on-failure
 SystemCallArchitectures=native
 Type=notify
@@ -138,54 +166,15 @@ ListenStream=%t/pulse/native
 [Install]
 WantedBy=sockets.target' | sudo tee /etc/systemd/system/pulseaudio.socket
 
-sudo systemctl daemon-reload
-sudo systemctl --system enable pulseaudio.socket
-sudo systemctl --system enable pulseaudio.service
-sudo systemctl --system start pulseaudio.socket
-sudo systemctl --system start pulseaudio.service
-
-sudo cp /etc/pulse/system.pa /etc/pulse/system.pa-bkp
-sudo cp /etc/pulse/default.pa /etc/pulse/system.pa
-
-sudo usermod -a -G audio pulse
-sudo usermod -a -G bluetooth pulse
-sudo usermod -a -G pulse-access pi
-sudo usermod -a -G pulse-access snapclient
-sudo usermod -a -G pulse-access snapserver
-sudo usermod -a -G pulse-access root
-
 mkdir -p /home/pi/.config/pulse
 echo "default-server = unix:/tmp/pulse-socket" > /home/pi/.config/pulse/client.conf
 
-sudo su - snapserver -s /bin/bash -c 'mkdir -p /var/lib/snapserver/.config/pulse; echo "default-server = unix:/tmp/pulse-socket" > /var/lib/snapserver/.config/pulse/client.conf'
-
-sudo sed -i -e 's,After=.*,& snapserver.service pulseaudio.service,g' /etc/systemd/system/snapclient.service
-
-sudo sed -i -e 's,After=.*,& snapserver.service pulseaudio.service snapclient.service,g' /etc/systemd/system/ledfx.service
-
-sudo systemctl daemon-reload
-
-sudo systemctl start snapserver
-sudo systemctl enable snapserver
-sudo systemctl start snapclient
-sudo systemctl enable snapclient
-
-sudo reboot
-```
-
 ## Bluetooth
-
-This part is not fully tested - some bugs occur not letting the raspberry to shutdown - needs to pull the plug. (or wait for some minutes)
-
-```bash
-sudo apt-get install pulseaudio pulseaudio-module-bluetooth bluez-tools
-sudo usermod -a -G bluetooth pi
 sudo sed -i -e 's/#DiscoverableTimeout = 0/DiscoverableTimeout = 0/g' /etc/bluetooth/main.conf
 sudo sed -i -e 's/#IdleTimeout.*/IdleTimeout = 0/g' /etc/bluetooth/input.conf
-sudo sed -i -e 's/#Class = 0.*/Class = 0x41C/g' /etc/bluetooth/main.conf # Do we really need it? https://www.bluetooth.com/specifications/assigned-numbers/baseband
+sudo sed -i -e 's/#Class = 0.*/Class = 0x41C/g' /etc/bluetooth/main.conf
 sudo sed -i -e 's/StopWhenUnneeded=yes/StopWhenUnneeded=yes/g' /lib/systemd/system/bluetooth.service
-sudo systemctl daemon-reload
-sudo systemctl restart bluetooth
+
 echo '[Unit]
 Description=Bluetooth Auth Agent
 After=bluetooth.service
@@ -194,31 +183,43 @@ PartOf=bluetooth.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
-ExecStartPost=hciconfig hci0 piscan
+ExecStartPost=/usr/bin/hciconfig hci0 piscan
 
 [Install]
 WantedBy=bluetooth.target' | sudo tee /etc/systemd/system/bt-agent.service
-sudo systemctl enable bt-agent
-sudo systemctl start bt-agent
 
-echo '.ifexists module-switch-on-connect.so
-load-module module-switch-on-connect
-.endif' | sudo tee -a /etc/pulse/system.pa
 
-sudo sed -i -e 's/^load-module module-suspend-on-idle/#load-module module-suspend-on-idle/g' /etc/pulse/system.pa
+## Configuring Operating System
+sudo hciconfig hci0 piscan
 
+sudo usermod -a -G audio pulse
 sudo usermod -a -G bluetooth pulse
-
-sudo systemctl restart dbus
-sudo systemctl restart pulseaudio
-sudo systemctl status pulseaudio
-
-sudo sed -i -e 's/ExecStart.*/& --exit-idle-time=-1/g' /etc/systemd/system/pulseaudio.service
-sudo systemctl daemon-reload
-sudo systemctl restart pulseaudio
-sudo systemctl status pulseaudio
-
+sudo usermod -a -G pulse-access pi
+sudo usermod -a -G pulse-access snapclient
+sudo usermod -a -G pulse-access snapserver
+sudo usermod -a -G pulse-access root
+sudo usermod -a -G bluetooth pi
+sudo usermod -a -G bluetooth pulse
 sudo usermod -a -G bluetooth snapserver
-sudo systemctl restart snapserver
+
+
+sudo systemctl daemon-reload
+
+sudo systemctl enable ledfx
+sudo systemctl enable snapserver
+sudo systemctl enable snapclient
+sudo systemctl --system enable pulseaudio.socket
+sudo systemctl --system enable pulseaudio.service
+sudo systemctl enable bt-agent
+
+
 sudo reboot
 ```
+
+## Configuring
+
+Now open the browser at `http://<ip-of-your-raspberry-pi>:8888` and configure the LED strip at `Devices`. At `Settings` change the `Audio Device` to **pulse**.
+
+At `http://<ip-of-your-raspberry-pi>:1780` configure the Pi to listen to the "default" Snapcast stream.
+
+Try to pair your phone via Bluetooth and play some music. TODO: Bluetooth is not "multi-room" yet, need to configure snapcast server to listen to bluetooth (or pipe the bluetooth to somewhere).
