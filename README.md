@@ -3,8 +3,9 @@
 ## Problems
 
 - [ ] Snapcast doesn't work with Bluetooth (Try to sink the Bluetooth audio to the Snapcast server)
-- [ ] If a device disconnects from the Bluetooth, need to do `bluetoothctl list` and `bluetoothctl remove <MAC>` to remove the device
+- [ ] If a device disconnects from the Bluetooth, need to do `bluetoothctl devices` and `bluetoothctl remove <MAC>` to remove the device
 - [ ] It takes too long to shutdown the Raspberry PI (Something related to the bluetooth)
+- [ ] Volume buttons for bluetooth devices don't work
 
 ## Installing
 
@@ -174,6 +175,7 @@ sudo sed -i -e 's/#DiscoverableTimeout = 0/DiscoverableTimeout = 0/g' /etc/bluet
 sudo sed -i -e 's/#IdleTimeout.*/IdleTimeout = 0/g' /etc/bluetooth/input.conf
 sudo sed -i -e 's/#Class = 0.*/Class = 0x41C/g' /etc/bluetooth/main.conf
 sudo sed -i -e 's/StopWhenUnneeded=yes/StopWhenUnneeded=yes/g' /lib/systemd/system/bluetooth.service
+sudo sed -i -e 's,/bluetooth/bluetoothd,& --noplugin=sap,g' /lib/systemd/system/bluetooth.service
 
 echo '[Unit]
 Description=Bluetooth Auth Agent
@@ -201,6 +203,7 @@ sudo usermod -a -G pulse-access root
 sudo usermod -a -G bluetooth pi
 sudo usermod -a -G bluetooth pulse
 sudo usermod -a -G bluetooth snapserver
+sudo usermod -a -G snapserver pi
 
 
 sudo systemctl daemon-reload
