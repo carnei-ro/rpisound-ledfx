@@ -7,8 +7,8 @@ sudo apt install --no-install-recommends -y \
       libasound2-dev libavahi-client-dev libavcodec-dev libavformat-dev libavutil-dev \
       libboost-program-options-dev libboost-system-dev libboost-test-dev libboost-thread-dev \
       libconfig-dev libexpat1-dev libflac-dev libgcrypt-dev libglib2.0-dev libmosquitto-dev \
-      libopus-dev libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev \
-      libsoxr-dev libssl-dev libtool libvorbis-dev libvorbisidec-dev pulseaudio uuid-dev vim xxd
+      libopus-dev libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev libsoxr-dev \
+      libssl-dev libtool libvorbis-dev libvorbisidec-dev pulseaudio pulsemixer uuid-dev vim xxd
 
 git clone https://github.com/mikebrady/nqptp.git
 cd nqptp
@@ -170,5 +170,55 @@ sudo systemctl enable snapserver
 sudo systemctl start snapclient
 sudo systemctl enable snapclient
 
+sudo reboot
+```
+
+## Bluetooth
+
+This part is not fully tested - some bugs occur not letting the raspberry to shutdown - needs to pull the plug. (or wait for some minutes)
+
+```bash
+sudo apt-get install pulseaudio pulseaudio-module-bluetooth bluez-tools
+sudo usermod -a -G bluetooth pi
+sudo sed -i -e 's/#DiscoverableTimeout = 0/DiscoverableTimeout = 0/g' /etc/bluetooth/main.conf
+sudo sed -i -e 's/#IdleTimeout.*/IdleTimeout = 0/g' /etc/bluetooth/input.conf
+sudo sed -i -e 's/#Class = 0.*/Class = 0x41C/g' /etc/bluetooth/main.conf # Do we really need it? https://www.bluetooth.com/specifications/assigned-numbers/baseband
+sudo sed -i -e 's/StopWhenUnneeded=yes/StopWhenUnneeded=yes/g' /lib/systemd/system/bluetooth.service
+sudo systemctl daemon-reload
+sudo systemctl restart bluetooth
+echo '[Unit]
+Description=Bluetooth Auth Agent
+After=bluetooth.service
+PartOf=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
+ExecStartPost=hciconfig hci0 piscan
+
+[Install]
+WantedBy=bluetooth.target' | sudo tee /etc/systemd/system/bt-agent.service
+sudo systemctl enable bt-agent
+sudo systemctl start bt-agent
+
+echo '.ifexists module-switch-on-connect.so
+load-module module-switch-on-connect
+.endif' | sudo tee -a /etc/pulse/system.pa
+
+sudo sed -i -e 's/^load-module module-suspend-on-idle/#load-module module-suspend-on-idle/g' /etc/pulse/system.pa
+
+sudo usermod -a -G bluetooth pulse
+
+sudo systemctl restart dbus
+sudo systemctl restart pulseaudio
+sudo systemctl status pulseaudio
+
+sudo sed -i -e 's/ExecStart.*/& --exit-idle-time=-1/g' /etc/systemd/system/pulseaudio.service
+sudo systemctl daemon-reload
+sudo systemctl restart pulseaudio
+sudo systemctl status pulseaudio
+
+sudo usermod -a -G bluetooth snapserver
+sudo systemctl restart snapserver
 sudo reboot
 ```
