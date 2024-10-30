@@ -13,7 +13,7 @@
 sudo apt update
 sudo apt install --no-install-recommends -y \
       alsa-utils autoconf automake avahi-daemon bluez-tools build-essential cmake curl gcc git \
-      libasound2-dev libatlas3-base libavahi-client-dev libavcodec-dev libavformat-dev libavformat58 \
+      libasound2-dev libatlas3-base libavahi-client-dev libavcodec-dev libavformat-dev libavformat60 \
       libavutil-dev libboost-program-options-dev libboost-system-dev libboost-test-dev libboost-thread-dev \
       libconfig-dev libexpat1-dev libflac-dev libgcrypt-dev libglib2.0-dev libmosquitto-dev libopus-dev \
       libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev libsoxr-dev libssl-dev libtool \
