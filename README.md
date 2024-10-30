@@ -1,5 +1,7 @@
 # Raspberry PI Sound System with AirPlay, Spotify, Snapcast, and LEDFX
 
+Installed on 2024-10-22-raspios-bullseye-arm64.img
+
 ## Problems
 
 - [ ] Snapcast doesn't work with Bluetooth (Try to sink the Bluetooth audio to the Snapcast server)
@@ -13,12 +15,12 @@
 sudo apt update
 sudo apt install --no-install-recommends -y \
       alsa-utils autoconf automake avahi-daemon bluez-tools build-essential cmake curl gcc git \
-      libasound2-dev libatlas3-base libavahi-client-dev libavcodec-dev libavformat-dev libavformat60 \
+      libasound2-dev libatlas3-base libavahi-client-dev libavcodec-dev libavformat-dev libavformat58 \
       libavutil-dev libboost-program-options-dev libboost-system-dev libboost-test-dev libboost-thread-dev \
       libconfig-dev libexpat1-dev libflac-dev libgcrypt-dev libglib2.0-dev libmosquitto-dev libopus-dev \
       libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev libsoxr-dev libssl-dev libtool \
       libvorbis-dev libvorbisidec-dev portaudio19-dev pulseaudio pulseaudio-module-bluetooth pulsemixer \
-      libatopology2t64 alsa-utils python3-pip uuid-dev vim xxd
+      python3-pip uuid-dev vim xxd
 
 ## Dependencies for AirPlay
 git clone https://github.com/mikebrady/nqptp.git
@@ -53,13 +55,13 @@ sudo make install
 cd ..
 
 ## Raspotify
-wget https://dtcooper.github.io/raspotify/raspotify-latest_arm64.deb
-sudo dpkg -i https://dtcooper.github.io/raspotify/raspotify-latest_arm64.deb
+curl -sL https://dtcooper.github.io/raspotify/install.sh | sh
 sudo journalctl -xeu raspotify
 
 ## LedFX
 python3 -m pip install --upgrade pip wheel setuptools
 python3 -m pip install ledfx
+sed -i -e '/Not a compatible WLED brand/,+1s/raise/# raise/g' $HOME/.local/lib/python3.*/site-packages/ledfx/utils.py
 sudo usermod -a -G audio pi
 echo "[Unit]
 Description=LedFx Music Visualizer
