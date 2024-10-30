@@ -102,6 +102,10 @@ sudo sed -i -e '/ExecStart=/iExecStartPre=mkdir -p /var/lib/snapclient/.config/p
 sudo sed -i -e '/ExecStart=/iExecStartPre=echo "default-server = unix:/tmp/pulse-socket" > /var/lib/snapclient/.config/pulse/client.conf' /etc/systemd/system/snapclient.service
 sudo sed -i -e 's,After=.*,& snapserver.service pulseaudio.service,g' /etc/systemd/system/snapclient.service
 
+wget https://github.com/badaix/snapweb/releases/download/v0.8.0/snapweb_0.8.0-1_all.deb
+sudo sed -i -e 's;/usr/local/share/snapserver/snapweb;/usr/share/snapweb;g' /etc/snapserver.conf
+sudo dpkg -i snapweb_0.8.0-1_all.deb
+
 echo '# Start the server, used only by the init.d script
 START_SNAPSERVER=true
 
