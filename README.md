@@ -18,7 +18,7 @@ sudo apt install --no-install-recommends -y \
       libconfig-dev libexpat1-dev libflac-dev libgcrypt-dev libglib2.0-dev libmosquitto-dev libopus-dev \
       libplist-dev libpopt-dev libpulse-dev libsndfile1-dev libsodium-dev libsoxr-dev libssl-dev libtool \
       libvorbis-dev libvorbisidec-dev portaudio19-dev pulseaudio pulseaudio-module-bluetooth pulsemixer \
-      python3-pip uuid-dev vim xxd
+      libatopology2t64 alsa-utils python3-pip uuid-dev vim xxd
 
 ## Dependencies for AirPlay
 git clone https://github.com/mikebrady/nqptp.git
@@ -53,7 +53,8 @@ sudo make install
 cd ..
 
 ## Raspotify
-curl -sL https://dtcooper.github.io/raspotify/install.sh | sh
+wget https://dtcooper.github.io/raspotify/raspotify-latest_arm64.deb
+sudo dpkg -i https://dtcooper.github.io/raspotify/raspotify-latest_arm64.deb
 sudo journalctl -xeu raspotify
 
 ## LedFX
